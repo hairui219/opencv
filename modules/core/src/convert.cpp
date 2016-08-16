@@ -4545,22 +4545,19 @@ static short convertFp16SW(float fp32)
 }
 #endif
 
+#if CV_FP16 && (defined __GNUC__) && (defined __arm__ || defined __aarch64__)
+    #if 5 <= __GNUC__
+    static inline float16x4_t load_f16(const short* p) { return vld1_f16((const float16_t*)p); }
+    static inline void store_f16(short* p, float16x4_t v) { vst1_f16((float16_t*)p, v); }
+    #else
+    static inline float16x4_t load_f16(const short* p) { return (float16x4_t)vld1_s16(p); }
+    static inline void store_f16(short* p, float16x4_t v) { vst1_s16(p, (int16x4_t)v); }
+    #endif
+#endif
+
 // template for FP16 HW conversion function
 template<typename T, typename DT> static void
-cvtScaleHalf_( const T* src, size_t sstep, DT* dst, size_t dstep, Size size)
-{
-    sstep /= sizeof(src[0]);
-    dstep /= sizeof(dst[0]);
-
-    for( ; size.height--; src += sstep, dst += dstep )
-    {
-        int x = 0;
-
-        for ( ; x < size.width; x++ )
-        {
-        }
-    }
-}
+cvtScaleHalf_( const T* src, size_t sstep, DT* dst, size_t dstep, Size size);
 
 template<> void
 cvtScaleHalf_<float, short>( const float* src, size_t sstep, short* dst, size_t dstep, Size size)
@@ -4568,29 +4565,31 @@ cvtScaleHalf_<float, short>( const float* src, size_t sstep, short* dst, size_t 
     sstep /= sizeof(src[0]);
     dstep /= sizeof(dst[0]);
 
-    if( checkHardwareSupport(CV_FP16) )
+    if( checkHardwareSupport(CV_CPU_FP16) )
     {
         for( ; size.height--; src += sstep, dst += dstep )
         {
             int x = 0;
 
-            if ( ( (intptr_t)dst & 0xf ) == 0 && ( (intptr_t)src & 0xf ) == 0 )
+#if defined(__x86_64__) || defined(_M_X64) || defined(_M_IX86) || defined(i386)
+            if ( ( (intptr_t)dst & 0xf ) == 0 )
+#endif
             {
 #if CV_FP16
                 for ( ; x <= size.width - 4; x += 4)
                 {
 #if defined(__x86_64__) || defined(_M_X64) || defined(_M_IX86) || defined(i386)
-                    __m128 v_src = _mm_load_ps(src + x);
+                    __m128 v_src = _mm_loadu_ps(src + x);
 
                     __m128i v_dst = _mm_cvtps_ph(v_src, 0);
 
                     _mm_storel_epi64((__m128i *)(dst + x), v_dst);
 #elif defined __GNUC__ && (defined __arm__ || defined __aarch64__)
-                    float32x4_t v_src = *(float32x4_t*)(src + x);
+                    float32x4_t v_src = vld1q_f32(src + x);
 
                     float16x4_t v_dst = vcvt_f16_f32(v_src);
 
-                    *(float16x4_t*)(dst + x) = v_dst;
+                    store_f16(dst + x, v_dst);
 #else
 #error "Configuration error"
 #endif
@@ -4622,13 +4621,15 @@ cvtScaleHalf_<short, float>( const short* src, size_t sstep, float* dst, size_t 
     sstep /= sizeof(src[0]);
     dstep /= sizeof(dst[0]);
 
-    if( checkHardwareSupport(CV_FP16) )
+    if( checkHardwareSupport(CV_CPU_FP16) )
     {
         for( ; size.height--; src += sstep, dst += dstep )
         {
             int x = 0;
 
-            if ( ( (intptr_t)dst & 0xf ) == 0 && ( (intptr_t)src & 0xf ) == 0 && checkHardwareSupport(CV_CPU_FP16) )
+#if defined(__x86_64__) || defined(_M_X64) || defined(_M_IX86) || defined(i386)
+            if ( ( (intptr_t)src & 0xf ) == 0 )
+#endif
             {
 #if CV_FP16
                 for ( ; x <= size.width - 4; x += 4)
@@ -4638,13 +4639,13 @@ cvtScaleHalf_<short, float>( const short* src, size_t sstep, float* dst, size_t 
 
                     __m128 v_dst = _mm_cvtph_ps(v_src);
 
-                    _mm_store_ps((dst + x), v_dst);
+                    _mm_storeu_ps(dst + x, v_dst);
 #elif defined __GNUC__ && (defined __arm__ || defined __aarch64__)
-                    float16x4_t v_src = *(float16x4_t*)(src + x);
+                    float16x4_t v_src = load_f16(src+x);
 
                     float32x4_t v_dst = vcvt_f32_f16(v_src);
 
-                    *(float32x4_t*)(dst + x) = v_dst;
+                    vst1q_f32(dst + x, v_dst);
 #else
 #error "Configuration error"
 #endif
@@ -4761,7 +4762,7 @@ static void cvtScaleAbs##suffix( const stype* src, size_t sstep, const uchar*, s
 static void cvtScaleHalf##suffix( const stype* src, size_t sstep, const uchar*, size_t, \
 dtype* dst, size_t dstep, Size size, double*) \
 { \
-    cvtScaleHalf##_<stype,dtype>(src, sstep, dst, dstep, size); \
+    cvtScaleHalf_<stype,dtype>(src, sstep, dst, dstep, size); \
 }
 
 #define DEF_CVT_SCALE_FUNC(suffix, stype, dtype, wtype) \
@@ -5153,6 +5154,7 @@ void cv::convertFp16( InputArray _src, OutputArray _dst)
         ddepth = CV_32F;
         break;
     default:
+        CV_Error(Error::StsUnsupportedFormat, "Unsupported input depth");
         return;
     }
 

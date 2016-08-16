@@ -164,6 +164,8 @@ endif()
 # OpenCV cmake options
 # ----------------------------------------------------------------------------
 
+OCV_OPTION(OPENCV_ENABLE_NONFREE "Enable non-free algorithms" OFF)
+
 # Optional 3rd party components
 # ===================================================
 OCV_OPTION(WITH_1394           "Include IEEE1394 support"                    ON   IF (NOT ANDROID AND NOT IOS AND NOT WINRT) )
@@ -222,7 +224,7 @@ OCV_OPTION(WITH_VA             "Include VA support"                          OFF
 OCV_OPTION(WITH_VA_INTEL       "Include Intel VA-API/OpenCL support"         OFF  IF (UNIX AND NOT ANDROID) )
 OCV_OPTION(WITH_GDAL           "Include GDAL Support"                        OFF  IF (NOT ANDROID AND NOT IOS AND NOT WINRT) )
 OCV_OPTION(WITH_GPHOTO2        "Include gPhoto2 library support"             ON   IF (UNIX AND NOT ANDROID) )
-OCV_OPTION(WITH_LAPACK         "Include Lapack library support"              ON   IF (UNIX AND NOT ANDROID) )
+OCV_OPTION(WITH_LAPACK         "Include Lapack library support"              ON   IF (NOT ANDROID) )
 
 # OpenCV build components
 # ===================================================
@@ -913,6 +915,11 @@ status("    To be built:"            OPENCV_MODULES_BUILD          THEN ${OPENCV
 status("    Disabled:"               OPENCV_MODULES_DISABLED_USER  THEN ${OPENCV_MODULES_DISABLED_USER_ST}  ELSE "-")
 status("    Disabled by dependency:" OPENCV_MODULES_DISABLED_AUTO  THEN ${OPENCV_MODULES_DISABLED_AUTO_ST}  ELSE "-")
 status("    Unavailable:"            OPENCV_MODULES_DISABLED_FORCE THEN ${OPENCV_MODULES_DISABLED_FORCE_ST} ELSE "-")
+
+if(OPENCV_ENABLE_NONFREE)
+  status("")
+  status("  Non-free algorithms are enabled")
+endif()
 
 # ========================== Android details ==========================
 if(ANDROID)

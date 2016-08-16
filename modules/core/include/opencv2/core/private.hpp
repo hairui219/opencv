@@ -71,6 +71,17 @@
 #  endif
 #endif
 
+#if defined HAVE_FP16 && (defined __F16C__ || (defined _MSC_VER && _MSC_VER >= 1700))
+#  include <immintrin.h>
+#  define CV_FP16 1
+#elif defined HAVE_FP16 && defined __GNUC__
+#  define CV_FP16 1
+#endif
+
+#ifndef CV_FP16
+#  define CV_FP16 0
+#endif
+
 //! @cond IGNORED
 
 namespace cv
@@ -371,9 +382,15 @@ static struct __IppInitializer__ __ipp_initializer__;
         return __VA_ARGS__;                                                 \
     }
 #endif
-
+#define CV_IPP_RUN_FAST(func, ...)                                          \
+    if (cv::ipp::useIPP() && (func))                                        \
+    {                                                                       \
+        CV_IMPL_ADD(CV_IMPL_IPP);                                           \
+        return __VA_ARGS__;                                                 \
+    }
 #else
 #define CV_IPP_RUN_(condition, func, ...)
+#define CV_IPP_RUN_FAST(func, ...)
 #endif
 
 #define CV_IPP_RUN(condition, func, ...) CV_IPP_RUN_(condition, func, __VA_ARGS__)
